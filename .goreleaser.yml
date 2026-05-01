@@ -22,6 +22,16 @@ archives:
       - goos: windows
         format: zip
 
+brews:
+  - repository:
+      owner: KestrelAI
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://usekestrel.ai
+    description: "Kestrel CLI — manage workflows from the terminal"
+    install: |
+      bin.install "kestrel"
+
 checksum:
   name_template: "checksums.txt"
 
