@@ -183,11 +183,28 @@ type SignalTemplate struct {
 }
 
 type ActionTemplate struct {
-	ID          string `json:"id"`
-	Integration string `json:"integration"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Category    string `json:"category"`
+	ID          string              `json:"id"`
+	Integration string              `json:"integration"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Category    string              `json:"category"`
+	Fields      []ActionConfigField `json:"fields,omitempty"`
+}
+
+type ActionConfigField struct {
+	Name        string         `json:"name"`
+	Label       string         `json:"label"`
+	Type        string         `json:"type"`
+	Required    bool           `json:"required"`
+	Default     interface{}    `json:"default,omitempty"`
+	Placeholder string         `json:"placeholder,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Options     []SelectOption `json:"options,omitempty"`
+}
+
+type SelectOption struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 type IntegrationMeta struct {

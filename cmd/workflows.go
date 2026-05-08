@@ -186,6 +186,19 @@ var wfActivateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := mustClient()
 		if err := client.ActivateWorkflow(args[0]); err != nil {
+			errStr := err.Error()
+			if strings.Contains(errStr, "missing required fields") || strings.Contains(errStr, "missing_fields") {
+				var parsed struct {
+					Message string `json:"message"`
+				}
+				// Try to extract the structured message from the JSON error
+				if idx := strings.Index(errStr, "{"); idx >= 0 {
+					if jsonErr := json.Unmarshal([]byte(errStr[idx:]), &parsed); jsonErr == nil && parsed.Message != "" {
+						fmt.Printf("%s Cannot activate: %s\n", render.Red("✗"), parsed.Message)
+						return nil
+					}
+				}
+			}
 			return err
 		}
 		fmt.Printf("%s Workflow %s activated\n", render.Green("✓"), args[0])
@@ -310,7 +323,8 @@ var wfGenerateCmd = &cobra.Command{
 	Use:   "generate <prompt>",
 	Short: "Generate a workflow from natural language description",
 	Long: `Use the Kestrel AI agent to generate a workflow from a plain English description.
-The generated workflow is displayed as an ASCII diagram and can be saved.
+The generated workflow is displayed as an ASCII diagram. If required fields are
+missing, you'll be prompted for each one before saving.
 
 Example:
   kestrel workflows generate "When a pod crashloops, run RCA, create a Jira ticket, and notify #incidents on Slack"`,
@@ -339,11 +353,18 @@ Example:
 		fmt.Printf("\n  %s\n\n", render.Bold("Workflow Diagram"))
 		fmt.Println(render.WorkflowDiagram(resp.Definition))
 
+		// Check for missing required fields
+		definition := resp.Definition
+		definition, err = promptForMissingFields(client, definition)
+		if err != nil {
+			return err
+		}
+
 		if wfGenerateSave {
 			req := api.CreateWorkflowRequest{
 				Name:          resp.Name,
 				Description:   resp.Description,
-				Definition:    resp.Definition,
+				Definition:    definition,
 				TriggerConfig: resp.TriggerConfig,
 				NLPrompt:      prompt,
 			}
@@ -357,6 +378,146 @@ Example:
 		}
 		return nil
 	},
+}
+
+// promptForMissingFields inspects the generated workflow definition against the
+// action catalog and interactively prompts the user for any required fields that
+// are empty. Returns the patched definition.
+func promptForMissingFields(client *api.Client, definition json.RawMessage) (json.RawMessage, error) {
+	catalog, err := client.GetCatalog()
+	if err != nil {
+		return definition, nil
+	}
+
+	templateIndex := make(map[string]api.ActionTemplate, len(catalog.Actions))
+	for _, t := range catalog.Actions {
+		templateIndex[t.ID] = t
+	}
+
+	var def struct {
+		Nodes []struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
+			Data struct {
+				Action string                 `json:"action"`
+				Label  string                 `json:"label"`
+				Config map[string]interface{} `json:"config"`
+			} `json:"data"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(definition, &def); err != nil {
+		return definition, nil
+	}
+
+	type missingEntry struct {
+		nodeIdx  int
+		field    api.ActionConfigField
+		nodeLabel string
+	}
+
+	var missing []missingEntry
+	for i, node := range def.Nodes {
+		if node.Type != "action" {
+			continue
+		}
+		tmpl, ok := templateIndex[node.Data.Action]
+		if !ok {
+			continue
+		}
+		config := node.Data.Config
+		if config == nil {
+			config = map[string]interface{}{}
+		}
+		for _, field := range tmpl.Fields {
+			if !field.Required || field.Type == "boolean" {
+				continue
+			}
+			val, exists := config[field.Name]
+			if !exists || val == nil || val == "" {
+				label := node.Data.Label
+				if label == "" {
+					label = tmpl.Name
+				}
+				missing = append(missing, missingEntry{nodeIdx: i, field: field, nodeLabel: label})
+			} else if s, ok := val.(string); ok && strings.TrimSpace(s) == "" {
+				label := node.Data.Label
+				if label == "" {
+					label = tmpl.Name
+				}
+				missing = append(missing, missingEntry{nodeIdx: i, field: field, nodeLabel: label})
+			}
+		}
+	}
+
+	if len(missing) == 0 {
+		return definition, nil
+	}
+
+	fmt.Printf("\n  %s Some required fields need values:\n\n", render.Yellow("!"))
+
+	reader := bufio.NewReader(os.Stdin)
+	patches := make(map[int]map[string]interface{})
+
+	for _, m := range missing {
+		hint := ""
+		if m.field.Description != "" {
+			hint = render.Gray(" (" + m.field.Description + ")")
+		}
+		if len(m.field.Options) > 0 {
+			optLabels := make([]string, 0, len(m.field.Options))
+			for _, o := range m.field.Options {
+				optLabels = append(optLabels, o.Value)
+			}
+			hint = render.Gray(" [" + strings.Join(optLabels, ", ") + "]")
+		}
+		fmt.Printf("  %s → %s%s: ", render.Bold(m.nodeLabel), m.field.Label, hint)
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			return definition, fmt.Errorf("field %q is required for node %q", m.field.Label, m.nodeLabel)
+		}
+		if patches[m.nodeIdx] == nil {
+			patches[m.nodeIdx] = make(map[string]interface{})
+		}
+		patches[m.nodeIdx][m.field.Name] = line
+	}
+
+	// Patch the definition with user-provided values
+	var rawDef map[string]interface{}
+	if err := json.Unmarshal(definition, &rawDef); err != nil {
+		return definition, nil
+	}
+	nodes, ok := rawDef["nodes"].([]interface{})
+	if !ok {
+		return definition, nil
+	}
+	for idx, fieldValues := range patches {
+		if idx >= len(nodes) {
+			continue
+		}
+		nodeMap, ok := nodes[idx].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		dataMap, ok := nodeMap["data"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		configMap, ok := dataMap["config"].(map[string]interface{})
+		if !ok {
+			configMap = make(map[string]interface{})
+			dataMap["config"] = configMap
+		}
+		for k, v := range fieldValues {
+			configMap[k] = v
+		}
+	}
+	patched, err := json.Marshal(rawDef)
+	if err != nil {
+		return definition, nil
+	}
+	fmt.Printf("\n  %s All required fields populated.\n", render.Green("✓"))
+	return patched, nil
 }
 
 var wfGenerateSave bool

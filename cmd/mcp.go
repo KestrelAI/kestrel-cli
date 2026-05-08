@@ -113,20 +113,32 @@ func registerTools(server *mcp.Server, client *api.Client, cfg *config.Config) {
 	})
 
 	// --- create_workflow ---
+	// Definition and TriggerConfig are typed as map[string]any so the MCP SDK
+	// reflects them as `type: object` in the tool's JSON schema. Using
+	// json.RawMessage here causes the SDK to expose `array<uint8>` (an array
+	// of byte values), which no LLM client can satisfy with a real workflow.
 	type createWorkflowArgs struct {
-		Name          string          `json:"name" jsonschema:"Workflow name"`
-		Description   string          `json:"description" jsonschema:"Workflow description"`
-		Definition    json.RawMessage `json:"definition" jsonschema:"Workflow definition with nodes and edges"`
-		TriggerConfig json.RawMessage `json:"trigger_config" jsonschema:"Trigger configuration"`
-		NLPrompt      string          `json:"nl_prompt,omitempty" jsonschema:"Original natural language prompt"`
+		Name          string         `json:"name" jsonschema:"Workflow name"`
+		Description   string         `json:"description" jsonschema:"Workflow description"`
+		Definition    map[string]any `json:"definition" jsonschema:"Workflow definition with nodes and edges"`
+		TriggerConfig map[string]any `json:"trigger_config" jsonschema:"Trigger configuration"`
+		NLPrompt      string         `json:"nl_prompt,omitempty" jsonschema:"Original natural language prompt"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "create_workflow",
 		Description: "Create a new workflow from a structured definition.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args createWorkflowArgs) (*mcp.CallToolResult, any, error) {
+		def, err := json.Marshal(args.Definition)
+		if err != nil {
+			return errResult(fmt.Errorf("marshal definition: %w", err))
+		}
+		trig, err := json.Marshal(args.TriggerConfig)
+		if err != nil {
+			return errResult(fmt.Errorf("marshal trigger_config: %w", err))
+		}
 		result, err := client.CreateWorkflow(api.CreateWorkflowRequest{
 			Name: args.Name, Description: args.Description,
-			Definition: args.Definition, TriggerConfig: args.TriggerConfig,
+			Definition: def, TriggerConfig: trig,
 			NLPrompt: args.NLPrompt,
 		})
 		if err != nil {
@@ -137,20 +149,28 @@ func registerTools(server *mcp.Server, client *api.Client, cfg *config.Config) {
 
 	// --- update_workflow ---
 	type updateWorkflowArgs struct {
-		WorkflowID    string          `json:"workflow_id" jsonschema:"The workflow UUID to update"`
-		Name          string          `json:"name" jsonschema:"Updated name"`
-		Description   string          `json:"description" jsonschema:"Updated description"`
-		Definition    json.RawMessage `json:"definition" jsonschema:"Updated definition"`
-		TriggerConfig json.RawMessage `json:"trigger_config" jsonschema:"Updated trigger config"`
-		NLPrompt      string          `json:"nl_prompt,omitempty"`
+		WorkflowID    string         `json:"workflow_id" jsonschema:"The workflow UUID to update"`
+		Name          string         `json:"name" jsonschema:"Updated name"`
+		Description   string         `json:"description" jsonschema:"Updated description"`
+		Definition    map[string]any `json:"definition" jsonschema:"Updated definition"`
+		TriggerConfig map[string]any `json:"trigger_config" jsonschema:"Updated trigger config"`
+		NLPrompt      string         `json:"nl_prompt,omitempty"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "update_workflow",
 		Description: "Update an existing workflow's name, description, or definition.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args updateWorkflowArgs) (*mcp.CallToolResult, any, error) {
+		def, err := json.Marshal(args.Definition)
+		if err != nil {
+			return errResult(fmt.Errorf("marshal definition: %w", err))
+		}
+		trig, err := json.Marshal(args.TriggerConfig)
+		if err != nil {
+			return errResult(fmt.Errorf("marshal trigger_config: %w", err))
+		}
 		result, err := client.UpdateWorkflow(args.WorkflowID, api.UpdateWorkflowRequest{
 			Name: args.Name, Description: args.Description,
-			Definition: args.Definition, TriggerConfig: args.TriggerConfig,
+			Definition: def, TriggerConfig: trig,
 			NLPrompt: args.NLPrompt,
 		})
 		if err != nil {
