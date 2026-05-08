@@ -304,8 +304,20 @@ func (c *Client) do(method, path string, body interface{}, out interface{}) erro
 
 	if resp.StatusCode >= 400 {
 		msg := string(respBody)
-		if len(msg) > 200 {
-			msg = msg[:200]
+		// Try to extract a structured error message from JSON responses
+		var errBody struct {
+			Message string `json:"message"`
+			Error   string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errBody) == nil {
+			if errBody.Message != "" {
+				msg = errBody.Message
+			} else if errBody.Error != "" {
+				msg = errBody.Error
+			}
+		}
+		if len(msg) > 500 {
+			msg = msg[:500]
 		}
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, msg)
 	}

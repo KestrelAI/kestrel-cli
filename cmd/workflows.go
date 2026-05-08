@@ -187,17 +187,9 @@ var wfActivateCmd = &cobra.Command{
 		client := mustClient()
 		if err := client.ActivateWorkflow(args[0]); err != nil {
 			errStr := err.Error()
-			if strings.Contains(errStr, "missing required fields") || strings.Contains(errStr, "missing_fields") {
-				var parsed struct {
-					Message string `json:"message"`
-				}
-				// Try to extract the structured message from the JSON error
-				if idx := strings.Index(errStr, "{"); idx >= 0 {
-					if jsonErr := json.Unmarshal([]byte(errStr[idx:]), &parsed); jsonErr == nil && parsed.Message != "" {
-						fmt.Printf("%s Cannot activate: %s\n", render.Red("✗"), parsed.Message)
-						return nil
-					}
-				}
+			if strings.Contains(errStr, "missing required fields") || strings.Contains(errStr, "required field") {
+				fmt.Printf("%s Cannot activate: %s\n", render.Red("✗"), strings.TrimPrefix(errStr, fmt.Sprintf("HTTP 400: ")))
+				return nil
 			}
 			return err
 		}
