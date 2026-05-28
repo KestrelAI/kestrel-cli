@@ -169,6 +169,29 @@ func (c *Client) CancelExecution(id string) error {
 	return c.post("/api/workflow-executions/"+id+"/cancel", nil, nil)
 }
 
+func (c *Client) ReplayExecution(id, mode string) (*ReplayResponse, error) {
+	body := map[string]string{"mode": mode}
+	var out ReplayResponse
+	if err := c.post("/api/workflow-executions/"+id+"/replay", body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) RollbackWorkflow(workflowID string, version int) error {
+	path := fmt.Sprintf("/api/workflows/%s/rollback?version=%d", workflowID, version)
+	return c.post(path, nil, nil)
+}
+
+func (c *Client) ListWorkflowVersions(workflowID string, page, pageSize int) (*VersionListResponse, error) {
+	path := fmt.Sprintf("/api/workflows/%s/versions?page=%d&page_size=%d", workflowID, page, pageSize)
+	var out VersionListResponse
+	if err := c.get(path, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // --- Approvals ---
 
 func (c *Client) ListPendingApprovals() ([]WorkflowApproval, error) {

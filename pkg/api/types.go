@@ -243,3 +243,25 @@ type CreateAPIKeyRequest struct {
 	Scopes    []string `json:"scopes"`
 	ExpiresIn string   `json:"expires_in,omitempty"`
 }
+
+type ReplayResponse struct {
+	ExecutionID string `json:"execution_id"`
+}
+
+type WorkflowVersion struct {
+	ID             string `json:"id"`
+	WorkflowID     string `json:"workflow_id"`
+	VersionNumber  int    `json:"version_number"`
+	Name           string `json:"name"`
+	Description    string `json:"description,omitempty"`
+	CreatedByEmail string `json:"created_by_email,omitempty"`
+	CreatedAt      string `json:"created_at"`
+	ChangeSummary  string `json:"change_summary,omitempty"`
+}
+
+type VersionListResponse struct {
+	Versions []WorkflowVersion `json:"versions"`
+	Total    int               `json:"total"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"page_size"`
+}
