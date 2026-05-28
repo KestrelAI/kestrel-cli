@@ -37,6 +37,9 @@ func init() {
 	workflowsCmd.AddCommand(wfIntegrationsCmd)
 	workflowsCmd.AddCommand(wfSuggestionsCmd)
 	workflowsCmd.AddCommand(wfRequestCmd)
+	workflowsCmd.AddCommand(wfVersionsCmd)
+	workflowsCmd.AddCommand(wfRollbackCmd)
+	workflowsCmd.AddCommand(wfReplayCmd)
 }
 
 // --- list ---
@@ -613,128 +616,8 @@ var wfExecutionsCmd = &cobra.Command{
 func init() {
 	wfExecutionsCmd.Flags().IntVar(&execPage, "page", 1, "Page number")
 	wfExecutionsCmd.Flags().IntVar(&execPageSize, "page-size", 20, "Results per page")
-	workflowsCmd.AddCommand(wfExecDetailCmd)
-	wfExecDetailCmd.Flags().BoolVar(&execOutputJSON, "json", false, "Output raw JSON")
-}
-
-// --- execution detail ---
-
-var execOutputJSON bool
-
-var wfExecDetailCmd = &cobra.Command{
-	Use:     "execution <execution-id>",
-	Aliases: []string{"exec"},
-	Short:   "Show detailed execution with step outputs",
-	Args:    cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		client := mustClient()
-		exec, err := client.GetExecution(args[0])
-		if err != nil {
-			return err
-		}
-
-		if execOutputJSON {
-			data, _ := json.MarshalIndent(exec, "", "  ")
-			fmt.Println(string(data))
-			return nil
-		}
-
-		fmt.Printf("\n  %s\n", render.Bold("Execution Detail"))
-		fmt.Printf("  %-16s %s\n", render.Gray("ID:"), exec.ID)
-		fmt.Printf("  %-16s %s\n", render.Gray("Workflow:"), exec.WorkflowID)
-		fmt.Printf("  %-16s %s\n", render.Gray("Status:"), render.StatusColor(exec.Status))
-		fmt.Printf("  %-16s %s\n", render.Gray("Started:"), render.TimeAgo(exec.StartedAt))
-		if exec.CompletedAt != nil {
-			fmt.Printf("  %-16s %s\n", render.Gray("Completed:"), render.TimeAgo(*exec.CompletedAt))
-		}
-		if exec.ErrorMessage != "" {
-			fmt.Printf("  %-16s %s\n", render.Gray("Error:"), render.Red(exec.ErrorMessage))
-		}
-
-		// Parse and display trigger signal
-		if len(exec.TriggerSignal) > 0 {
-			var signal map[string]interface{}
-			if json.Unmarshal(exec.TriggerSignal, &signal) == nil && len(signal) > 0 {
-				fmt.Printf("\n  %s\n", render.Bold("Trigger Signal"))
-				if st, ok := signal["signal_type"].(string); ok && st != "" {
-					fmt.Printf("    %-20s %s\n", render.Gray("signal_type:"), st)
-				}
-				if rn, ok := signal["resource_name"].(string); ok && rn != "" {
-					fmt.Printf("    %-20s %s\n", render.Gray("resource:"), rn)
-				}
-				if meta, ok := signal["metadata"].(map[string]interface{}); ok {
-					for k, v := range meta {
-						vs := fmt.Sprintf("%v", v)
-						if vs != "" && vs != "0" && vs != "<nil>" {
-							fmt.Printf("    %-20s %s\n", render.Gray(k+":"), render.Truncate(vs, 100))
-						}
-					}
-				}
-			}
-		}
-
-		// Parse and display step results
-		if len(exec.StepResults) > 0 {
-			var steps []map[string]interface{}
-			if json.Unmarshal(exec.StepResults, &steps) == nil && len(steps) > 0 {
-				fmt.Printf("\n  %s\n", render.Bold("Steps"))
-				for i, step := range steps {
-					stepID, _ := step["step_id"].(string)
-					action, _ := step["action"].(string)
-					status, _ := step["status"].(string)
-					integration, _ := step["integration"].(string)
-
-					label := action
-					if integration != "" {
-						label = integration + "/" + action
-					}
-					if stepID != "" {
-						label = stepID + " (" + label + ")"
-					}
-
-					fmt.Printf("\n  %s %s  %s\n", render.Gray(fmt.Sprintf("[%d]", i+1)), render.Bold(label), render.StatusColor(status))
-
-					// Print timing
-					if startedAt, ok := step["started_at"].(string); ok {
-						if completedAt, ok := step["completed_at"].(string); ok && completedAt != "" {
-							fmt.Printf("      %-18s %s → %s\n", render.Gray("duration:"), render.TimeAgo(startedAt), render.TimeAgo(completedAt))
-						}
-					}
-
-					// Print outputs
-					output, ok := step["output"].(map[string]interface{})
-					if !ok || len(output) == 0 {
-						continue
-					}
-					fmt.Printf("      %s\n", render.Gray("outputs:"))
-					for k, v := range output {
-						vs := fmt.Sprintf("%v", v)
-						if len(vs) > 500 {
-							vs = vs[:497] + "..."
-						}
-						// Skip very long or complex nested outputs
-						if _, isMap := v.(map[string]interface{}); isMap {
-							nested, _ := json.Marshal(v)
-							vs = string(nested)
-							if len(vs) > 500 {
-								vs = vs[:497] + "..."
-							}
-						}
-						if _, isArr := v.([]interface{}); isArr {
-							nested, _ := json.Marshal(v)
-							vs = string(nested)
-							if len(vs) > 500 {
-								vs = vs[:497] + "..."
-							}
-						}
-						fmt.Printf("        %-16s %s\n", render.Cyan(k+":"), vs)
-					}
-				}
-			}
-		}
-		fmt.Println()
-		return nil
-	},
+	wfRollbackCmd.Flags().IntVar(&wfRollbackVersion, "version", 0, "Version number to roll back to")
+	wfReplayCmd.Flags().BoolVar(&replayFromFailed, "from-failed", false, "Replay from the failed step instead of the beginning")
 }
 
 // --- catalog ---
@@ -962,5 +845,85 @@ Examples:
 			}
 		}
 		return fmt.Errorf("could not collect all required parameters after %d rounds", maxRounds)
+	},
+}
+
+// --- versions ---
+
+var wfVersionsCmd = &cobra.Command{
+	Use:   "versions <workflow-id>",
+	Short: "List version history for a workflow",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := mustClient()
+		resp, err := client.ListWorkflowVersions(args[0], 1, 20)
+		if err != nil {
+			return err
+		}
+		if len(resp.Versions) == 0 {
+			fmt.Println("No version history yet.")
+			return nil
+		}
+		fmt.Printf("\n  %s (%d total)\n\n", render.Bold("Version History"), resp.Total)
+		rows := make([][]string, len(resp.Versions))
+		for i, v := range resp.Versions {
+			rows[i] = []string{
+				fmt.Sprintf("v%d", v.VersionNumber),
+				v.ChangeSummary,
+				v.CreatedByEmail,
+				v.CreatedAt,
+			}
+		}
+		render.Table([]string{"Version", "Summary", "By", "Created"}, rows)
+		return nil
+	},
+}
+
+// --- rollback ---
+
+var wfRollbackVersion int
+
+var wfRollbackCmd = &cobra.Command{
+	Use:   "rollback <workflow-id>",
+	Short: "Roll back a workflow to a previous version",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if wfRollbackVersion <= 0 {
+			return fmt.Errorf("--version flag is required (e.g. --version 3)")
+		}
+		client := mustClient()
+		if err := client.RollbackWorkflow(args[0], wfRollbackVersion); err != nil {
+			return err
+		}
+		fmt.Printf("%s Rolled back to version %d\n", render.Green("✓"), wfRollbackVersion)
+		return nil
+	},
+}
+
+// --- replay ---
+
+var replayFromFailed bool
+
+var wfReplayCmd = &cobra.Command{
+	Use:   "replay <execution-id>",
+	Short: "Replay a failed workflow execution",
+	Long:  "Replay a failed workflow execution from the beginning (default) or from the failed step (--from-failed).",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := mustClient()
+		mode := "full"
+		if replayFromFailed {
+			mode = "from_failed"
+		}
+		resp, err := client.ReplayExecution(args[0], mode)
+		if err != nil {
+			return err
+		}
+		label := "from beginning"
+		if replayFromFailed {
+			label = "from failed step"
+		}
+		fmt.Printf("%s Replay started (%s): %s\n", render.Green("✓"), label, resp.ExecutionID)
+		return nil
 	},
 }
