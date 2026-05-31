@@ -239,7 +239,16 @@ func (c *Client) TriggerWorkflowRequest(prompt, requesterName string) (map[strin
 		"requester_name": requesterName,
 	}
 	var out map[string]interface{}
-	if err := c.post("/api/workflow-requests", body, &out); err != nil {
+	if err := c.post("/api/workflow-requests/submit", body, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) ReplyToWorkflowRequest(requestID, message string) (map[string]interface{}, error) {
+	body := map[string]string{"message": message}
+	var out map[string]interface{}
+	if err := c.post("/api/workflow-requests/"+requestID+"/reply", body, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
