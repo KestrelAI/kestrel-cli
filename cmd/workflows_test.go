@@ -3,11 +3,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -110,12 +112,11 @@ func TestCLISaveAllowedWithMissingFields(t *testing.T) {
 	}
 }
 
-// TestCLIGeneratePromptsMissingFields tests that `kestrel workflows generate`
-// detects and prompts for missing required fields from the catalog.
+// TestCLIGeneratePromptsMissingFields tests that `kestrel workflows generate --save`
+// detects missing required fields, prompts the user, and saves the patched workflow.
 func TestCLIGeneratePromptsMissingFields(t *testing.T) {
-	callCount := 0
+	var createBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
 		switch {
 		case r.Method == "POST" && r.URL.Path == "/api/workflows/generate":
 			w.Header().Set("Content-Type", "application/json")
@@ -153,6 +154,15 @@ func TestCLIGeneratePromptsMissingFields(t *testing.T) {
 				},
 				"integrations": []interface{}{},
 			})
+		case r.Method == "POST" && r.URL.Path == "/api/workflows":
+			// Capture the create request body to verify the patched definition
+			body, _ := io.ReadAll(r.Body)
+			createBody = body
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(201)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "wf-saved", "name": "Scale Service", "status": "draft",
+			})
 		default:
 			http.Error(w, "not found", 404)
 		}
@@ -160,30 +170,101 @@ func TestCLIGeneratePromptsMissingFields(t *testing.T) {
 	defer srv.Close()
 
 	bin := buildCLI(t)
-	// Run generate without --save (shouldn't prompt since we aren't saving)
-	// But the prompting only happens if --save is passed, so test the detection output
-	out, _ := runCLIWithStdin(bin, srv.URL, "my-app\n", "workflows", "generate", "scale my service", "--save")
-	// Should show the prompt for missing "Resource Name" field
-	if !strings.Contains(out, "Resource Name") && !strings.Contains(out, "required fields") {
-		t.Logf("Output:\n%s", out)
-		// Even if the prompt times out (no stdin in test), verify the catalog was fetched
-		if callCount < 2 {
-			t.Errorf("expected at least 2 server calls (generate + catalog), got %d", callCount)
-		}
+	// Provide "my-app" as stdin answer to the missing "Resource Name" prompt
+	out, err := runCLIWithStdin(bin, srv.URL, "my-app\n", "workflows", "generate", "scale my service", "--save")
+	if err != nil {
+		t.Fatalf("generate --save failed: %v\nOutput: %s", err, out)
+	}
+
+	// Verify the CLI prompted for the missing field
+	if !strings.Contains(out, "Resource Name") {
+		t.Errorf("expected prompt for 'Resource Name', got:\n%s", out)
+	}
+	// Verify it reported fields were populated
+	if !strings.Contains(out, "required fields") {
+		t.Errorf("expected 'required fields' confirmation, got:\n%s", out)
+	}
+	// Verify the workflow was saved
+	if !strings.Contains(out, "Saved") && !strings.Contains(out, "wf-saved") {
+		t.Errorf("expected save confirmation, got:\n%s", out)
+	}
+	// Verify the saved definition includes the user's answer patched in
+	if len(createBody) == 0 {
+		t.Fatal("expected POST /api/workflows to be called with the patched definition")
+	}
+	if !strings.Contains(string(createBody), "my-app") {
+		t.Errorf("expected patched definition to contain 'my-app', got:\n%s", string(createBody))
 	}
 }
 
 // --- helpers ---
 
+// buildCLI returns a path to a kestrel binary. Resolution order:
+//  1. KESTREL_BIN env var (if set, must exist)
+//  2. Build from local source (../) — the dev/CI default; ensures tests
+//     exercise the working tree, not a stale globally installed binary.
+//  3. /opt/homebrew/bin/kestrel
+//  4. kestrel on $PATH
+//
+// The local-build result is cached for the test binary's lifetime so we
+// only pay the build cost once per `go test` invocation.
 func buildCLI(t *testing.T) string {
 	t.Helper()
-	bin := t.TempDir() + "/kestrel-test"
-	cmd := exec.Command("go", "build", "-o", bin, ".")
-	cmd.Dir = cliRootDir()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("failed to build CLI: %v\n%s", err, out)
+	if bin := os.Getenv("KESTREL_BIN"); bin != "" {
+		if _, err := os.Stat(bin); err == nil {
+			t.Logf("using binary: %s", bin)
+			return bin
+		}
+		t.Fatalf("KESTREL_BIN=%s does not exist", bin)
 	}
-	return bin
+	if bin := buildLocalCLI(t); bin != "" {
+		return bin
+	}
+	homebrewBin := "/opt/homebrew/bin/kestrel"
+	if _, err := os.Stat(homebrewBin); err == nil {
+		t.Logf("using homebrew binary: %s", homebrewBin)
+		return homebrewBin
+	}
+	if path, err := exec.LookPath("kestrel"); err == nil {
+		t.Logf("using PATH binary: %s", path)
+		return path
+	}
+	t.Fatal("could not build kestrel from local source and no installed binary found")
+	return ""
+}
+
+var (
+	localCLIPath string
+	localCLIErr  error
+	localCLIOnce sync.Once
+)
+
+func buildLocalCLI(t *testing.T) string {
+	t.Helper()
+	localCLIOnce.Do(func() {
+		tmpDir, err := os.MkdirTemp("", "kestrel-cli-build-*")
+		if err != nil {
+			localCLIErr = err
+			return
+		}
+		out := tmpDir + "/kestrel"
+		// The test package is cli/cmd; the main package is at cli/ (one up).
+		cmd := exec.Command("go", "build", "-o", out, "..")
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			localCLIErr = err
+			return
+		}
+		localCLIPath = out
+	})
+	if localCLIErr != nil {
+		t.Logf("local CLI build failed: %v", localCLIErr)
+		return ""
+	}
+	if localCLIPath != "" {
+		t.Logf("using locally-built binary: %s", localCLIPath)
+	}
+	return localCLIPath
 }
 
 func runCLI(bin, server string, args ...string) (string, error) {
@@ -206,8 +287,4 @@ func runCLIWithStdin(bin, server, stdin string, args ...string) (string, error) 
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
-}
-
-func cliRootDir() string {
-	return ".."
 }
