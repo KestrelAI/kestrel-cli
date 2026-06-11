@@ -321,8 +321,9 @@ var wfGenerateCmd = &cobra.Command{
 The generated workflow is displayed as an ASCII diagram. If required fields are
 missing, you'll be prompted for each one before saving.
 
-Example:
-  kestrel workflows generate "When a pod crashloops, run RCA, create a Jira ticket, and notify #incidents on Slack"`,
+Examples:
+  kestrel workflows generate "When a pod crashloops, run RCA, create a Jira ticket, and notify #incidents on Slack"
+  kestrel workflows generate "When a deployment fails, create a Linear issue for the ENG team with the failure context"`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		prompt := strings.Join(args, " ")
