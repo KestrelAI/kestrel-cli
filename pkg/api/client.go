@@ -215,6 +215,14 @@ func (c *Client) RejectStep(id string) error {
 	return c.post("/api/workflow-approvals/"+id+"/reject", nil, nil)
 }
 
+// RequestChangesStep sends free-text feedback to a refine-approval gate. The
+// upstream RCA agent re-runs with this guidance and the gate re-requests
+// approval, looping until approved/rejected or max rounds are reached.
+func (c *Client) RequestChangesStep(id, feedback string) error {
+	body := map[string]string{"feedback": feedback}
+	return c.post("/api/workflow-approvals/"+id+"/request-changes", body, nil)
+}
+
 // --- Requests ---
 
 func (c *Client) ListWorkflowRequests() ([]WorkflowRequest, error) {

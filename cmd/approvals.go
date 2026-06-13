@@ -21,6 +21,7 @@ func init() {
 	approvalsCmd.AddCommand(approvalsListCmd)
 	approvalsCmd.AddCommand(approvalsApproveCmd)
 	approvalsCmd.AddCommand(approvalsRejectCmd)
+	approvalsCmd.AddCommand(approvalsRequestChangesCmd)
 }
 
 var approvalsListCmd = &cobra.Command{
@@ -156,4 +157,63 @@ var approvalsRejectCmd = &cobra.Command{
 		fmt.Printf("%s Rejected %s\n", render.Red("✗"), args[0])
 		return nil
 	},
+}
+
+var approvalFeedback string
+
+var approvalsRequestChangesCmd = &cobra.Command{
+	Use:   "request-changes <approval-id>",
+	Short: "Request changes on a refine-approval gate (re-runs the RCA with your feedback)",
+	Long: `Send free-text guidance back to a refine-approval gate. The upstream RCA
+agent re-runs with your feedback and the gate re-requests approval — looping
+until you approve or reject (or max rounds are reached).
+
+Provide feedback with --feedback or you will be prompted interactively.
+
+Examples:
+  kestrel approvals request-changes <id> --feedback "The root cause is the readiness probe, not the image. Re-check the probe config."
+  kestrel approvals request-changes <id>`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client := mustClient()
+
+		if approvalFeedback == "" {
+			// Surface the current RCA summary / refine round if available.
+			approvals, _ := client.ListPendingApprovals()
+			for _, a := range approvals {
+				if a.ID == args[0] {
+					var ctx map[string]interface{}
+					if err := json.Unmarshal(a.Context, &ctx); err == nil {
+						if round, ok := ctx["refine_round"]; ok {
+							fmt.Printf("  Refine round: %v\n", round)
+						}
+						if prompt, ok := ctx["prompt_message"].(string); ok && prompt != "" {
+							fmt.Printf("  %s\n", prompt)
+						}
+					}
+					break
+				}
+			}
+			fmt.Printf("\n  %s Describe the changes the RCA agent should make.\n\n", render.Yellow("!"))
+			fmt.Print("  Feedback: ")
+			reader := bufio.NewReader(os.Stdin)
+			line, _ := reader.ReadString('\n')
+			approvalFeedback = strings.TrimSpace(line)
+			if approvalFeedback == "" {
+				return fmt.Errorf("feedback is required to request changes")
+			}
+		}
+
+		if err := client.RequestChangesStep(args[0], approvalFeedback); err != nil {
+			return err
+		}
+		fmt.Printf("%s Requested changes on %s\n", render.Yellow("↻"), args[0])
+		fmt.Printf("  Feedback: %s\n", approvalFeedback)
+		fmt.Printf("  The RCA is re-running with your guidance; a new approval will appear when it's ready.\n")
+		return nil
+	},
+}
+
+func init() {
+	approvalsRequestChangesCmd.Flags().StringVarP(&approvalFeedback, "feedback", "f", "", "Free-text guidance for the RCA agent (you'll be prompted if omitted)")
 }

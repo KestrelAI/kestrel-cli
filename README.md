@@ -45,6 +45,7 @@ kestrel workflows stats             # Aggregate statistics
 kestrel approvals list              # Pending approval gates
 kestrel approvals approve <id>
 kestrel approvals reject <id>
+kestrel approvals request-changes <id>  # Re-run RCA with feedback (refine loop)
 
 kestrel requests list               # Workflow requests
 kestrel requests approve <id>
