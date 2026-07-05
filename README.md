@@ -1,6 +1,6 @@
 # Kestrel CLI
 
-Command-line interface for [Kestrel](https://usekestrel.ai) — AI Agents for Cloud Operations.
+Command-line interface for [Kestrel](https://usekestrel.ai) — AI Agents for Platform Engineering.
 
 ## Install
 
