@@ -57,6 +57,12 @@ type Spec struct {
 	// Extra hint printed after a successful connect (e.g. webhook setup).
 	// `{server}` is replaced with the configured Kestrel server URL.
 	PostConnectHint string
+
+	// WebhookSecretPath is the endpoint that saves vendor-generated webhook
+	// signing secret(s) after connect, for integrations where the third party
+	// generates the secret (e.g. PlanetScale, Vercel). Enables
+	// `kestrel integrations webhook-secret <name>`.
+	WebhookSecretPath string
 }
 
 // Registry lists every integration the CLI can manage, keyed by Spec.Key.
@@ -110,11 +116,11 @@ configuration file preview it shows.`,
 		DisconnectPath: "/api/integrations/cloudflare/disconnect",
 		TestPath:       "/api/integrations/cloudflare/test",
 		SetupHelp: `API token: Cloudflare dashboard -> My Profile -> API Tokens -> Create Token -> Custom Token.
-  Grant: Zone (DNS Edit, Zone Read, Firewall Services Edit, Cache Purge, Page Rules Edit,
-  Zone Settings Edit, WAF Edit) and Account (Workers Scripts Edit, Load Balancing Edit,
-  Cloudflare Tunnel Edit, Access: Apps Edit). Scope Account Resources to your account.
+  Grant: Zone (DNS Edit, Zone Settings Edit, Zone Read, Analytics Read, Firewall Services
+  Edit, Health Checks Edit) and Account (Workers Scripts Edit, Workers KV Storage Edit,
+  Account Analytics Read, Account Settings Read). Scope Account Resources to your account.
 Account ID: in the dashboard URL — dash.cloudflare.com/<account-id>/home.`,
-		PostConnectHint: "To receive alerts, add a webhook in Cloudflare: Manage account -> Notifications -> Destinations -> Webhooks -> Create, with URL {server}/api/webhooks/cloudflare and the secret shown on the Cloudflare integration page, then route notifications to it.",
+		PostConnectHint: "To receive alerts, add a webhook in Cloudflare: Manage account -> Notifications -> Destinations -> Webhooks -> Create, with URL {server}/api/webhooks/cloudflare and the webhook secret printed above, then route notifications to it.",
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "Cloudflare API token", Required: true, Secret: true},
 			{Flag: "account-id", JSON: "account_id", Usage: "Cloudflare account ID", Required: true},
@@ -144,7 +150,7 @@ Provide the full authorized-key JSON document (use --credentials-file to read it
 		SetupHelp: `API token: Jenkins -> your user (top right) -> Security -> API Token -> Add new token.
 The user needs permission to read jobs and trigger builds. Auth is username + token (HTTP Basic).
 The Jenkins URL must be reachable from the Kestrel server.`,
-		PostConnectHint: "Optional: to receive build events, add a webhook via the Notification plugin (job -> Configure -> Job Notifications) posting JSON to {server}/api/webhooks/jenkins with your secret in the X-Kestrel-Webhook-Secret header.",
+		PostConnectHint: "Optional: to receive build events, add a webhook via the Notification plugin (job -> Configure -> Job Notifications) posting JSON to {server}/api/webhooks/jenkins with the webhook secret printed above in the X-Kestrel-Webhook-Secret header.",
 		Fields: []Field{
 			{Flag: "base-url", JSON: "base_url", Usage: "Jenkins URL (https://jenkins.example.com)", Required: true},
 			{Flag: "username", JSON: "username", Usage: "Jenkins username", Required: true},
@@ -159,7 +165,7 @@ The Jenkins URL must be reachable from the Kestrel server.`,
 		TestPath:       "/api/integrations/circleci/test",
 		SetupHelp: `API token: CircleCI -> User Settings -> Personal API Tokens -> Create New Token.
 Org slug (optional): Organization Settings -> Overview (e.g. gh/my-org).`,
-		PostConnectHint: "To receive workflow/job events, add a webhook per project: Project Settings -> Webhooks -> Add Webhook with URL {server}/api/webhooks/circleci, your signing secret, and the Workflow Completed + Job Completed events.",
+		PostConnectHint: "To receive workflow/job events, add a webhook per project: Project Settings -> Webhooks -> Add Webhook with URL {server}/api/webhooks/circleci, the signing secret printed above, and the Workflow Completed + Job Completed events.",
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "CircleCI personal API token", Required: true, Secret: true},
 			{Flag: "org-slug", JSON: "org_slug", Usage: "Organization slug (e.g. gh/my-org)"},
@@ -174,7 +180,7 @@ Org slug (optional): Organization Settings -> Overview (e.g. gh/my-org).`,
 		SetupHelp: `API token: Terraform Cloud -> Organization Settings -> API Tokens -> Team Tokens (recommended),
 or a user token under Account Settings -> Tokens.
 Organization: the name in your URL — app.terraform.io/app/<organization>.`,
-		PostConnectHint: "To receive run events, add a notification per workspace: workspace -> Settings -> Notifications -> Create a Notification -> Webhook, URL {server}/api/webhooks/terraform, and select the run events. Repeat for each workspace.",
+		PostConnectHint: "To receive run events, add a notification per workspace: workspace -> Settings -> Notifications -> Create a Notification -> Webhook, URL {server}/api/webhooks/terraform, the token printed above, and select the run events. Repeat for each workspace.",
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "Terraform Cloud API token", Required: true, Secret: true},
 			{Flag: "organization", JSON: "organization", Usage: "Terraform Cloud organization", Required: true},
@@ -190,7 +196,7 @@ Organization: the name in your URL — app.terraform.io/app/<organization>.`,
 		SetupHelp: `Access token: Pulumi Cloud -> Organization Settings -> Access Tokens (recommended),
 or a personal token under Personal Settings -> Access Tokens (pul-...).
 Organization: the name in your URL — app.pulumi.com/<organization>.`,
-		PostConnectHint: "To receive stack/deployment events, add a webhook: org Settings -> Integrations -> Webhooks -> Add webhook (destination: Webhook), payload URL {server}/api/webhooks/pulumi, your secret, and check all trigger groups.",
+		PostConnectHint: "To receive stack/deployment events, add a webhook: org Settings -> Integrations -> Webhooks -> Add webhook (destination: Webhook), payload URL {server}/api/webhooks/pulumi, the secret printed above, and check all trigger groups.",
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "Pulumi access token", Required: true, Secret: true},
 			{Flag: "organization", JSON: "organization", Usage: "Pulumi organization", Required: true},
@@ -219,7 +225,8 @@ The Argo CD server URL must be reachable from the Kestrel server.`,
 		SetupHelp: `API token: Vercel -> your avatar -> Account Settings -> Tokens. Scope it to your team for
 team-level access. Team ID (optional, team_...): Vercel -> Settings -> General; leave blank
 for personal accounts.`,
-		PostConnectHint: "To receive deployment events, add a webhook in Vercel: Settings -> Webhooks -> Create Webhook with URL {server}/api/webhooks/vercel and the deployment/alert events, then paste the signing secret (shown once) on the Vercel integration page.",
+		PostConnectHint:   "To receive deployment events, add a webhook in Vercel: Settings -> Webhooks -> Create Webhook with URL {server}/api/webhooks/vercel and the deployment/alert events, then save the signing secret (shown once) with: kestrel integrations webhook-secret vercel",
+		WebhookSecretPath: "/api/integrations/vercel/webhook-secret",
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "Vercel API token", Required: true, Secret: true},
 			{Flag: "team-id", JSON: "team_id", Usage: "Vercel team ID"},
@@ -234,7 +241,8 @@ for personal accounts.`,
 		SetupHelp: `API token: railway.com/account/tokens (Account Settings -> Tokens). Leave the Workspace
 dropdown at "No workspace" to mint an account-scoped token that can read your projects,
 services, deployments, and logs.`,
-		PostConnectHint: "To receive deployment events, add a webhook per project: Project -> Settings -> Webhooks with URL {server}/api/webhooks/railway (append ?secret=<your-secret> — Railway doesn't sign webhooks).",
+		PostConnectHint:   "To receive deployment events, choose a secret and save it with `kestrel integrations webhook-secret railway`, then add a webhook per project: Project -> Settings -> Webhooks with URL {server}/api/webhooks/railway?secret=<your-secret> (Railway doesn't sign webhooks).",
+		WebhookSecretPath: "/api/integrations/railway/webhook-secret",
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "Railway API token", Required: true, Secret: true},
 		},
@@ -262,7 +270,9 @@ No webhooks needed — Kestrel polls the Fly Machines API.`,
 		TestPath:       "/api/integrations/beam/test",
 		SetupHelp: `API token: Beam dashboard -> Settings -> API Keys & Workspace ID -> Create Key.
 Or via CLI: pip install beam-client && beam config create kestrel, then copy the token
-from ~/.beam/config.ini. No webhooks needed — Kestrel polls the Beam API.`,
+from ~/.beam/config.ini. Permissions: Full Access, or Restricted with Read+Write+Delete
+on Deployments, Containers, Tasks, Machines and Read on Images, Volumes, Logs.
+No webhooks needed — Kestrel polls the Beam API.`,
 		Fields: []Field{
 			{Flag: "api-token", JSON: "api_token", Usage: "Beam API token", Required: true, Secret: true},
 			{Flag: "gateway-base-url", JSON: "gateway_base_url", Usage: "Gateway base URL"},
@@ -293,7 +303,8 @@ snapshot/volume events, then open the endpoint and copy its Signing Secret (whse
 		TestPath:       "/api/integrations/supabase/test",
 		SetupHelp: `Access token: Supabase dashboard -> Account -> Access Tokens -> Generate new token (sbp_...).
 Kestrel polls the Management API for project health, backups, replicas, and branches.`,
-		PostConnectHint: "Optional: for row-level DB events, add a Database Webhook per project (Integrations -> Database Webhooks) posting to {server}/api/webhooks/supabase with your secret in the X-Supabase-Webhook-Secret header.",
+		PostConnectHint:   "Optional: for row-level DB events, add a Database Webhook per project (Integrations -> Database Webhooks) posting to {server}/api/webhooks/supabase with your secret in the X-Supabase-Webhook-Secret header, then save it with: kestrel integrations webhook-secret supabase",
+		WebhookSecretPath: "/api/integrations/supabase/webhook-secret",
 		Fields: []Field{
 			{Flag: "access-token", JSON: "access_token", Usage: "Supabase access token", Required: true, Secret: true},
 			{Flag: "webhook-secret", JSON: "webhook_secret", Usage: "Webhook signing secret", Secret: true},
@@ -310,7 +321,8 @@ Kestrel polls the Management API for project health, backups, replicas, and bran
 (or 'pscale service-token create'). You get a token ID + token (pscale_tkn_...).
 Permissions: org-level read_databases (required), plus branch/deploy-request/backup
 permissions on the databases you want Kestrel to manage.`,
-		PostConnectHint: "To receive branch/deploy events, add a webhook per database: Settings -> Webhooks -> Add webhook with URL {server}/api/webhooks/planetscale. PlanetScale shows a unique signing secret per webhook — paste it on the PlanetScale integration page.",
+		PostConnectHint:   "To receive branch/deploy events, add a webhook per database: Settings -> Webhooks -> Add webhook with URL {server}/api/webhooks/planetscale. PlanetScale shows a unique signing secret per webhook — save each with: kestrel integrations webhook-secret planetscale",
+		WebhookSecretPath: "/api/integrations/planetscale/webhook-secret",
 		Fields: []Field{
 			{Flag: "token-id", JSON: "token_id", Usage: "Service token ID", Required: true},
 			{Flag: "token", JSON: "token", Usage: "Service token", Required: true, Secret: true},

@@ -49,6 +49,24 @@ var integrationsDisconnectCmd = &cobra.Command{
 	RunE:  runIntegrationsDisconnect,
 }
 
+var integrationsWebhookSecretCmd = &cobra.Command{
+	Use:   "webhook-secret <name>",
+	Short: "Save a webhook signing secret for a connected integration",
+	Long: `Save a webhook signing secret for an integration where the third party
+generates the secret (Vercel, Railway, PlanetScale, Supabase). Create the
+webhook in the third-party product first, then paste its signing secret here —
+no need to re-enter your API token.
+
+For PlanetScale (one secret per database webhook) run this once per secret;
+new secrets are merged with the ones already stored.
+
+Examples:
+  kestrel integrations webhook-secret vercel        # prompts (hidden input)
+  kestrel integrations webhook-secret planetscale --secret <secret>`,
+	Args: cobra.ExactArgs(1),
+	RunE: runIntegrationsWebhookSecret,
+}
+
 var integrationsConnectCmd = &cobra.Command{
 	Use:   "connect <name> [flags]",
 	Short: "Connect an integration",
@@ -69,6 +87,8 @@ func init() {
 	integrationsCmd.AddCommand(integrationsConnectCmd)
 	integrationsCmd.AddCommand(integrationsTestCmd)
 	integrationsCmd.AddCommand(integrationsDisconnectCmd)
+	integrationsWebhookSecretCmd.Flags().String("secret", "", "Webhook signing secret (prompted with hidden input if omitted)")
+	integrationsCmd.AddCommand(integrationsWebhookSecretCmd)
 	rootCmd.AddCommand(integrationsCmd)
 
 	// One connect subcommand per integration, with flags generated from the registry.
@@ -246,14 +266,63 @@ func runIntegrationsDisconnect(cmd *cobra.Command, args []string) error {
 	}
 }
 
+func runIntegrationsWebhookSecret(cmd *cobra.Command, args []string) error {
+	key := strings.ToLower(args[0])
+	spec := integrations.Get(key)
+	if spec == nil {
+		return unknownIntegrationErr(key)
+	}
+	if spec.WebhookSecretPath == "" {
+		supported := make([]string, 0, 4)
+		for _, s := range integrations.Registry {
+			if s.WebhookSecretPath != "" {
+				supported = append(supported, s.Key)
+			}
+		}
+		sort.Strings(supported)
+		return fmt.Errorf("%s does not take a pasted webhook secret — supported: %s", spec.Name, strings.Join(supported, ", "))
+	}
+
+	secret, _ := cmd.Flags().GetString("secret")
+	if secret == "" {
+		v, err := promptField(integrations.Field{Flag: "secret", Usage: "Webhook signing secret", Secret: true})
+		if err != nil {
+			return err
+		}
+		secret = v
+	}
+	if secret == "" {
+		return fmt.Errorf("webhook secret is required")
+	}
+
+	client := mustClient()
+	out, err := client.ConnectIntegration(spec.WebhookSecretPath, map[string]interface{}{"webhook_secret": secret})
+	if err != nil {
+		return fmt.Errorf("save %s webhook secret: %w", spec.Name, err)
+	}
+	render.Success(fmt.Sprintf("%s webhook secret saved", spec.Name))
+	if n, ok := out["webhook_secret_count"].(float64); ok && n > 1 {
+		fmt.Printf("  %d webhook secrets stored (one per database webhook)\n", int(n))
+	}
+	return nil
+}
+
 // collectFields resolves each registry field from flags, files, or an
 // interactive prompt (hidden input for secrets). Before the first prompt, the
 // integration's setup instructions are printed so the user knows where to
-// create the credential (mirroring the platform UI). Required fields that
-// remain empty produce an error.
+// create the credential (mirroring the platform UI). Optional webhook-secret
+// fields are offered interactively too (Enter skips them — the secret can be
+// added later with `kestrel integrations webhook-secret <name>`). Required
+// fields that remain empty produce an error.
 func collectFields(cmd *cobra.Command, spec *integrations.Spec, serverURL string) (map[string]interface{}, error) {
 	body := map[string]interface{}{}
 	printedHelp := false
+	printHelpOnce := func() {
+		if !printedHelp {
+			printSetupHelp(spec, serverURL)
+			printedHelp = true
+		}
+	}
 	for _, f := range spec.Fields {
 		val, _ := cmd.Flags().GetString(f.Flag)
 
@@ -268,11 +337,22 @@ func collectFields(cmd *cobra.Command, spec *integrations.Spec, serverURL string
 		}
 
 		if val == "" && f.Required {
-			if !printedHelp {
-				printSetupHelp(spec, serverURL)
-				printedHelp = true
-			}
+			printHelpOnce()
 			v, err := promptField(f)
+			if err != nil {
+				return nil, err
+			}
+			val = v
+		}
+
+		// Optional webhook secrets: offer them interactively so webhook setup
+		// can be completed from the CLI in one pass, but let Enter skip.
+		if val == "" && !f.Required && f.Flag == "webhook-secret" && isInteractive() {
+			printHelpOnce()
+			v, err := promptField(integrations.Field{
+				Flag: f.Flag, JSON: f.JSON, Secret: f.Secret,
+				Usage: f.Usage + " (optional — press Enter to skip, add later with `kestrel integrations webhook-secret " + spec.Key + "`)",
+			})
 			if err != nil {
 				return nil, err
 			}
@@ -287,6 +367,11 @@ func collectFields(cmd *cobra.Command, spec *integrations.Spec, serverURL string
 		}
 	}
 	return body, nil
+}
+
+// isInteractive reports whether stdin is a terminal (i.e. we can prompt).
+func isInteractive() bool {
+	return term.IsTerminal(int(syscall.Stdin))
 }
 
 // indentLines prefixes every line of s with the given indent.
@@ -351,10 +436,23 @@ func connectToken(cmd *cobra.Command, client *api.Client, spec *integrations.Spe
 	if err != nil {
 		return err
 	}
-	if _, err := client.ConnectIntegration(spec.ConnectPath, body); err != nil {
+	out, err := client.ConnectIntegration(spec.ConnectPath, body)
+	if err != nil {
 		return fmt.Errorf("connect %s: %w", spec.Name, err)
 	}
 	render.Success(fmt.Sprintf("%s connected", spec.Name))
+	// Some integrations (CircleCI, Pulumi, Jenkins, Terraform, Cloudflare)
+	// return a Kestrel-generated webhook secret that the user must paste into
+	// the third-party product when creating the webhook — print it.
+	for _, key := range []string{"webhook_secret", "notification_token"} {
+		if secret, ok := out[key].(string); ok && secret != "" {
+			label := "Webhook secret"
+			if key == "notification_token" {
+				label = "Notification token"
+			}
+			fmt.Printf("  %s: %s\n", label, render.Cyan(secret))
+		}
+	}
 	if spec.PostConnectHint != "" {
 		fmt.Printf("  %s\n", render.Gray(expandServer(spec.PostConnectHint, client.BaseURL())))
 	}
