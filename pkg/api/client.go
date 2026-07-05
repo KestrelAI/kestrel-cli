@@ -262,6 +262,21 @@ func (c *Client) ReplyToWorkflowRequest(requestID, message string) (map[string]i
 	return out, nil
 }
 
+// GetPendingJustification checks if a workflow request has a pending justification.
+func (c *Client) GetPendingJustification(requestID string) (*JustificationPrompt, error) {
+	var out JustificationPrompt
+	if err := c.get("/api/workflow-requests/"+requestID+"/pending-justification", nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveJustification resolves a pending justification for a workflow request.
+func (c *Client) ResolveJustification(requestID, justificationText string) error {
+	body := map[string]string{"justification_text": justificationText}
+	return c.post("/api/workflow-requests/"+requestID+"/resolve-justification", body, nil)
+}
+
 // --- Suggestions ---
 
 func (c *Client) ListSuggestions() ([]SuggestedWorkflow, error) {

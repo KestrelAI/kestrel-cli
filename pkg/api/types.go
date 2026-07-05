@@ -157,6 +157,13 @@ type WorkflowRequest struct {
 	UpdatedAt         string          `json:"updated_at"`
 }
 
+type JustificationPrompt struct {
+	Pending       bool   `json:"pending"`
+	ApprovalID    string `json:"approval_id,omitempty"`
+	ExecutionID   string `json:"execution_id,omitempty"`
+	PromptMessage string `json:"prompt_message,omitempty"`
+}
+
 type SuggestedWorkflow struct {
 	ID          string          `json:"id"`
 	TenantID    string          `json:"tenant_id"`

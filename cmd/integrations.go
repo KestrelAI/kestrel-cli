@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"sort"
@@ -79,9 +80,14 @@ func init() {
 
 // buildConnectCommand creates the `connect <name>` subcommand for one integration.
 func buildConnectCommand(spec *integrations.Spec) *cobra.Command {
+	long := fmt.Sprintf("Connect %s — %s.", spec.Name, spec.Description)
+	if spec.SetupHelp != "" {
+		long += "\n\nSetup:\n" + indentLines(expandServer(spec.SetupHelp, "<kestrel-server>"), "  ")
+	}
 	cmd := &cobra.Command{
 		Use:   spec.Key,
 		Short: fmt.Sprintf("Connect %s — %s", spec.Name, spec.Description),
+		Long:  long,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			client := mustClient()
 			switch spec.Kind {
@@ -241,10 +247,13 @@ func runIntegrationsDisconnect(cmd *cobra.Command, args []string) error {
 }
 
 // collectFields resolves each registry field from flags, files, or an
-// interactive prompt (hidden input for secrets). Required fields that remain
-// empty produce an error.
-func collectFields(cmd *cobra.Command, spec *integrations.Spec) (map[string]interface{}, error) {
+// interactive prompt (hidden input for secrets). Before the first prompt, the
+// integration's setup instructions are printed so the user knows where to
+// create the credential (mirroring the platform UI). Required fields that
+// remain empty produce an error.
+func collectFields(cmd *cobra.Command, spec *integrations.Spec, serverURL string) (map[string]interface{}, error) {
 	body := map[string]interface{}{}
+	printedHelp := false
 	for _, f := range spec.Fields {
 		val, _ := cmd.Flags().GetString(f.Flag)
 
@@ -259,6 +268,10 @@ func collectFields(cmd *cobra.Command, spec *integrations.Spec) (map[string]inte
 		}
 
 		if val == "" && f.Required {
+			if !printedHelp {
+				printSetupHelp(spec, serverURL)
+				printedHelp = true
+			}
 			v, err := promptField(f)
 			if err != nil {
 				return nil, err
@@ -276,6 +289,23 @@ func collectFields(cmd *cobra.Command, spec *integrations.Spec) (map[string]inte
 	return body, nil
 }
 
+// indentLines prefixes every line of s with the given indent.
+func indentLines(s, indent string) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	for i, l := range lines {
+		lines[i] = indent + l
+	}
+	return strings.Join(lines, "\n")
+}
+
+// expandServer substitutes the {server} and <server> placeholders in setup
+// help / post-connect hints with the configured Kestrel server URL.
+func expandServer(s, serverURL string) string {
+	s = strings.ReplaceAll(s, "{server}", serverURL)
+	s = strings.ReplaceAll(s, "<server>", serverURL)
+	return s
+}
+
 func promptField(f integrations.Field) (string, error) {
 	if f.Secret {
 		fmt.Printf("%s: ", f.Usage)
@@ -286,16 +316,38 @@ func promptField(f integrations.Field) (string, error) {
 		}
 		return strings.TrimSpace(string(b)), nil
 	}
-	fmt.Printf("%s: ", f.Usage)
-	var v string
-	if _, err := fmt.Scanln(&v); err != nil {
+	v, err := promptString(f.Usage)
+	if err != nil {
 		return "", fmt.Errorf("read %s: %w", f.Flag, err)
 	}
-	return strings.TrimSpace(v), nil
+	return v, nil
+}
+
+// promptString reads a single line of non-secret input from stdin.
+func promptString(label string) (string, error) {
+	fmt.Printf("%s: ", label)
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+// printSetupHelp prints an integration's setup instructions (once) before
+// interactive prompts, so users pasting bare connect commands know where to
+// find each value.
+func printSetupHelp(spec *integrations.Spec, serverURL string) {
+	if spec == nil || spec.SetupHelp == "" {
+		return
+	}
+	fmt.Printf("Connecting %s\n\n", spec.Name)
+	fmt.Println(render.Gray(indentLines(expandServer(spec.SetupHelp, serverURL), "  ")))
+	fmt.Println()
 }
 
 func connectToken(cmd *cobra.Command, client *api.Client, spec *integrations.Spec) error {
-	body, err := collectFields(cmd, spec)
+	body, err := collectFields(cmd, spec, client.BaseURL())
 	if err != nil {
 		return err
 	}
@@ -304,7 +356,7 @@ func connectToken(cmd *cobra.Command, client *api.Client, spec *integrations.Spe
 	}
 	render.Success(fmt.Sprintf("%s connected", spec.Name))
 	if spec.PostConnectHint != "" {
-		fmt.Printf("  %s\n", render.Gray(spec.PostConnectHint))
+		fmt.Printf("  %s\n", render.Gray(expandServer(spec.PostConnectHint, client.BaseURL())))
 	}
 	if spec.TestPath != "" {
 		fmt.Printf("  Verify anytime with: %s\n", render.Cyan("kestrel integrations test "+spec.Key))
@@ -313,7 +365,7 @@ func connectToken(cmd *cobra.Command, client *api.Client, spec *integrations.Spe
 }
 
 func connectKnowledge(cmd *cobra.Command, client *api.Client, spec *integrations.Spec) error {
-	body, err := collectFields(cmd, spec)
+	body, err := collectFields(cmd, spec, client.BaseURL())
 	if err != nil {
 		return err
 	}

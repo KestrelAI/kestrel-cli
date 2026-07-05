@@ -49,6 +49,14 @@ func connectOAuth(client *api.Client, spec *integrations.Spec) error {
 func connectCluster(cmd *cobra.Command, client *api.Client) error {
 	clusterName, _ := cmd.Flags().GetString("cluster-name")
 	if clusterName == "" {
+		printSetupHelp(integrations.Get("kubernetes"), client.BaseURL())
+		v, err := promptString("Cluster name")
+		if err != nil {
+			return fmt.Errorf("read cluster-name: %w", err)
+		}
+		clusterName = v
+	}
+	if clusterName == "" {
 		return fmt.Errorf("--cluster-name is required")
 	}
 	description, _ := cmd.Flags().GetString("description")
@@ -188,18 +196,34 @@ func connectOCI(cmd *cobra.Command, client *api.Client) error {
 	region, _ := cmd.Flags().GetString("region")
 	connName, _ := cmd.Flags().GetString("connection-name")
 
-	var missing []string
-	for flag, v := range map[string]string{
-		"tenancy-ocid": tenancy, "user-ocid": user, "fingerprint": fingerprint,
-		"private-key-file": keyFile, "region": region,
+	// Prompt for anything missing so a bare `connect oci` works when pasted.
+	printedHelp := false
+	for _, p := range []struct {
+		label string
+		flag  string
+		val   *string
+	}{
+		{"Tenancy OCID", "tenancy-ocid", &tenancy},
+		{"User OCID", "user-ocid", &user},
+		{"API key fingerprint", "fingerprint", &fingerprint},
+		{"Path to PEM private key file", "private-key-file", &keyFile},
+		{"OCI region", "region", &region},
 	} {
-		if v == "" {
-			missing = append(missing, "--"+flag)
+		if *p.val != "" {
+			continue
 		}
-	}
-	if len(missing) > 0 {
-		return fmt.Errorf("missing required flags: %s\nRun `kestrel integrations connect oci --help` for setup details, or see the OCI setup instructions at %s",
-			strings.Join(missing, ", "), client.FormatIntegrationPage("/cloud-integrations"))
+		if !printedHelp {
+			printSetupHelp(integrations.Get("oci"), client.BaseURL())
+			printedHelp = true
+		}
+		v, err := promptString(p.label)
+		if err != nil {
+			return fmt.Errorf("read --%s: %w", p.flag, err)
+		}
+		if v == "" {
+			return fmt.Errorf("--%s is required", p.flag)
+		}
+		*p.val = v
 	}
 
 	keyData, err := os.ReadFile(keyFile)

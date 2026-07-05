@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"cli/pkg/api"
 	"cli/pkg/config"
@@ -769,6 +770,10 @@ Examples:
 				fmt.Printf("\n  %s Workflow is now executing.\n", render.Green("✓"))
 				if requestID != "" {
 					fmt.Printf("  Track it with: kestrel requests list\n")
+					// Poll for pending justification
+					if justification := pollForJustification(client, requestID, reader); justification != "" {
+						_ = justification
+					}
 				}
 				return nil
 
@@ -927,4 +932,40 @@ var wfReplayCmd = &cobra.Command{
 		fmt.Printf("%s Replay started (%s): %s\n", render.Green("✓"), label, resp.ExecutionID)
 		return nil
 	},
+}
+
+// pollForJustification polls for a pending justification after execution starts.
+// If found, prompts the user for input and resolves it.
+func pollForJustification(client *api.Client, requestID string, reader *bufio.Reader) string {
+	fmt.Printf("\n  %s Checking if justification is required...\n", render.Gray("⏳"))
+
+	const maxAttempts = 15
+	for i := 0; i < maxAttempts; i++ {
+		time.Sleep(2 * time.Second)
+
+		justification, err := client.GetPendingJustification(requestID)
+		if err != nil || justification == nil || !justification.Pending {
+			continue
+		}
+
+		fmt.Printf("\n  %s\n", render.Yellow("📝 Justification Required"))
+		fmt.Printf("  %s\n\n", justification.PromptMessage)
+		fmt.Printf("  %s: ", render.Bold("Your justification"))
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSpace(line)
+		if line == "" {
+			fmt.Printf("  %s Justification is required.\n", render.Red("✗"))
+			return ""
+		}
+
+		if err := client.ResolveJustification(requestID, line); err != nil {
+			fmt.Printf("  %s Failed to submit justification: %v\n", render.Red("✗"), err)
+			return ""
+		}
+
+		fmt.Printf("  %s Justification submitted. Workflow will continue once approved.\n", render.Green("✓"))
+		return line
+	}
+
+	return ""
 }
