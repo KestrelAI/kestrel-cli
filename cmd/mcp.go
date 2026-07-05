@@ -455,4 +455,6 @@ func registerTools(server *mcp.Server, client *api.Client, cfg *config.Config) {
 		}
 		return jsonResult(result)
 	})
+
+	registerIntegrationTools(server, client)
 }

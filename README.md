@@ -55,7 +55,36 @@ kestrel apikeys create <name>       # Create new key
 kestrel apikeys revoke <id>         # Revoke a key
 kestrel apikeys delete <id>         # Delete permanently
 
+kestrel integrations list           # All integrations + connection status
+kestrel integrations connect <name> # Connect an integration (flags vary per integration)
+kestrel integrations test <name>    # Test an integration's credentials
+kestrel integrations disconnect <name>
+
 kestrel mcp                         # Start MCP server for Claude/Cursor
+```
+
+### Connecting integrations
+
+Each integration has its own authentication requirements — run
+`kestrel integrations connect <name> --help` to see the exact flags.
+
+```bash
+# Token integrations (credentials via flags; secrets prompt interactively if omitted)
+kestrel integrations connect cloudflare --api-token <token> --account-id <id>
+kestrel integrations connect pagerduty --api-token <token> --webhook-secret <secret>
+
+# Knowledge sources
+kestrel integrations connect confluence --base-url https://acme.atlassian.net --email me@acme.com --api-token <token>
+
+# OAuth integrations print a browser URL to finish the flow
+kestrel integrations connect github
+
+# Kubernetes generates the operator token + Helm values file and prints the install command
+kestrel integrations connect kubernetes --cluster-name prod
+
+# AWS is a two-step IAM role flow
+kestrel integrations connect aws                 # step 1: prints CloudFormation/CLI instructions
+kestrel integrations connect aws --role-arn <arn> --external-id <id>  # step 2: verify
 ```
 
 ## MCP Integration
@@ -66,7 +95,7 @@ The CLI includes a built-in MCP (Model Context Protocol) server for AI assistant
 kestrel mcp
 ```
 
-This exposes 22 workflow management tools to Claude, Cursor, and other MCP-compatible AI assistants.
+This exposes 26 workflow and integration management tools to Claude, Cursor, and other MCP-compatible AI assistants — including `list_integrations`, `connect_integration`, `test_integration`, and `disconnect_integration`.
 
 ## License
 
