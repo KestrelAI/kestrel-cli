@@ -147,11 +147,11 @@ func runRegister(cmd *cobra.Command, _ []string) error {
 
 	fmt.Println()
 	for attempts := 0; attempts < 3; attempts++ {
-		fmt.Printf("Verification code (check %s, or press Enter to skip): ", registerEmail)
+		fmt.Printf("Verification code (check %s, or press Enter to verify later): ", registerEmail)
 		line, _ := reader.ReadString('\n')
 		code := strings.TrimSpace(line)
 		if code == "" {
-			fmt.Println("\nVerify later with:")
+			fmt.Println("\nYour account stays unverified until you enter the code. Verify with:")
 			fmt.Printf("  kestrel verify-email <code> --server %s\n", server)
 			return nil
 		}
