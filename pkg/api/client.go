@@ -262,6 +262,17 @@ func (c *Client) ReplyToWorkflowRequest(requestID, message string) (map[string]i
 	return out, nil
 }
 
+// ConfirmWorkflowRequest resolves a pending_confirmation request: confirm=true
+// files it for the platform team, confirm=false dismisses it.
+func (c *Client) ConfirmWorkflowRequest(requestID string, confirm bool) (map[string]interface{}, error) {
+	body := map[string]bool{"confirm": confirm}
+	var out map[string]interface{}
+	if err := c.post("/api/workflow-requests/"+requestID+"/confirm", body, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GetPendingJustification checks if a workflow request has a pending justification.
 func (c *Client) GetPendingJustification(requestID string) (*JustificationPrompt, error) {
 	var out JustificationPrompt

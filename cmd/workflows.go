@@ -818,6 +818,55 @@ Examples:
 				fmt.Printf("\n  Submitting with parameters...\n\n")
 				continue
 
+			case "pending_confirmation":
+				category, _ := result["category"].(string)
+				explanation, _ := result["explanation"].(string)
+				requestID, _ := result["request_id"].(string)
+				if requestID == "" {
+					requestID, _ = result["id"].(string)
+				}
+
+				fmt.Printf("  %s No matching workflow found\n", render.Red("✗"))
+				if category != "" {
+					fmt.Printf("  %s %s\n", render.Gray("Category:"), category)
+				}
+				if explanation != "" {
+					fmt.Printf("  %s\n", render.Gray(explanation))
+				}
+
+				if requestID == "" {
+					return nil
+				}
+
+				fmt.Printf("\n  Send this to your platform team as a workflow request? They can\n")
+				fmt.Printf("  create a workflow to handle this type of request. [y/N]: ")
+				line, _ := reader.ReadString('\n')
+				answer := strings.ToLower(strings.TrimSpace(line))
+				confirm := answer == "y" || answer == "yes"
+
+				confirmResult, err := client.ConfirmWorkflowRequest(requestID, confirm)
+				if err != nil {
+					return fmt.Errorf("failed to update request: %w", err)
+				}
+
+				if confirm {
+					fmt.Printf("\n  %s Request sent to your platform team.\n", render.Green("✓"))
+					requestURL, _ := result["request_url"].(string)
+					if requestURL != "" {
+						fmt.Printf("  View requests: %s\n", requestURL)
+					}
+					fmt.Printf("  Request ID: %s\n", requestID)
+					fmt.Printf("\n  Once a workflow is created for this type of request, it will be\n")
+					fmt.Printf("  available for future requests via this command.\n")
+				} else {
+					summary, _ := confirmResult["summary"].(string)
+					if summary == "" {
+						summary = "Request dismissed."
+					}
+					fmt.Printf("\n  %s\n", render.Gray(summary))
+				}
+				return nil
+
 			case "no_workflow":
 				category, _ := result["category"].(string)
 				explanation, _ := result["explanation"].(string)

@@ -250,7 +250,7 @@ func registerTools(server *mcp.Server, client *api.Client, cfg *config.Config) {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "request_workflow",
-		Description: "Submit a natural language request to trigger an existing workflow (like Slack /kestrel-workflow). If matched, the workflow executes immediately. If parameters are missing, returns what's needed. If no match, the request is logged for the infrastructure team.",
+		Description: "Submit a natural language request to trigger an existing workflow (like Slack /kestrel-workflow). If matched, the workflow executes immediately. If parameters are missing, returns what's needed. If no match, returns status pending_confirmation with a request_id — ask the user if they want to send it to their platform team, then call confirm_workflow_request.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args requestArgs) (*mcp.CallToolResult, any, error) {
 		name := args.RequesterName
 		if name == "" {
@@ -260,6 +260,22 @@ func registerTools(server *mcp.Server, client *api.Client, cfg *config.Config) {
 			name = "mcp-agent"
 		}
 		result, err := client.TriggerWorkflowRequest(args.Prompt, name)
+		if err != nil {
+			return errResult(err)
+		}
+		return jsonResult(result)
+	})
+
+	// --- confirm_workflow_request ---
+	type confirmRequestArgs struct {
+		RequestID string `json:"request_id" jsonschema:"The workflow request UUID returned by request_workflow"`
+		Confirm   bool   `json:"confirm" jsonschema:"true to send the request to the platform team, false to dismiss it"`
+	}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "confirm_workflow_request",
+		Description: "Resolve a pending_confirmation workflow request: confirm=true sends it to the platform team so they can create a workflow for it; confirm=false dismisses it. Always ask the user before calling this.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args confirmRequestArgs) (*mcp.CallToolResult, any, error) {
+		result, err := client.ConfirmWorkflowRequest(args.RequestID, args.Confirm)
 		if err != nil {
 			return errResult(err)
 		}
