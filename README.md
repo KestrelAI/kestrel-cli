@@ -19,6 +19,11 @@ go install github.com/KestrelAI/kestrel-cli@latest
 
 ## Authentication
 
+### New account
+```bash
+kestrel register            # sign up with a work email, verify, and log in
+```
+
 ### API key (recommended)
 ```bash
 kestrel auth kestrel_sk_...

@@ -53,6 +53,37 @@ func (c *Client) Login(email, password string) (*LoginResponse, error) {
 	return &resp, nil
 }
 
+// Register creates a new Kestrel account. The server sends a 6-character
+// verification code to the email address when email delivery is enabled.
+func (c *Client) Register(email, password string) (*RegisterResponse, error) {
+	body := map[string]string{"email": email, "password": password}
+	var resp RegisterResponse
+	if err := c.post("/api/register", body, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// VerifyEmail completes registration with the emailed 6-character code.
+// When the account has no 2FA the server returns a session token so the
+// user is logged in immediately.
+func (c *Client) VerifyEmail(code string) (*VerifyEmailResponse, error) {
+	body := map[string]string{"code": code}
+	var resp VerifyEmailResponse
+	if err := c.post("/api/verify-email", body, &resp); err != nil {
+		return nil, err
+	}
+	c.token = resp.SessionToken
+	return &resp, nil
+}
+
+// ResendVerificationEmail re-sends the verification code for an
+// unverified account.
+func (c *Client) ResendVerificationEmail(email string) error {
+	body := map[string]string{"email": email}
+	return c.post("/api/resend-verification-email", body, nil)
+}
+
 // ValidateSession checks if the current session is still valid.
 func (c *Client) ValidateSession() error {
 	return c.get("/api/validate-session", nil, nil)

@@ -32,15 +32,7 @@ func init() {
 func runAuth(cmd *cobra.Command, args []string) error {
 	reader := bufio.NewReader(os.Stdin)
 
-	if authServer == "" {
-		cfg, _ := config.Load()
-		if cfg != nil && cfg.ServerURL != "" {
-			authServer = cfg.ServerURL
-		} else {
-			authServer = "https://platform.usekestrel.ai"
-		}
-	}
-	authServer = strings.TrimRight(authServer, "/")
+	authServer = resolveServer(authServer)
 
 	var apiKey string
 	if len(args) > 0 {

@@ -9,6 +9,23 @@ type LoginResponse struct {
 	Requires2FA  bool   `json:"requires_2fa,omitempty"`
 }
 
+type RegisterResponse struct {
+	UserID   string `json:"user_id"`
+	TenantID string `json:"tenant_id,omitempty"`
+	Message  string `json:"message"`
+}
+
+type VerifyEmailResponse struct {
+	UserID     string `json:"user_id"`
+	TenantID   string `json:"tenant_id,omitempty"`
+	TenantName string `json:"tenant_name,omitempty"`
+	Message    string `json:"message"`
+	// Present when the server auto-logs the user in after verification
+	// (omitted for accounts with 2FA enabled).
+	SessionToken string `json:"session_token,omitempty"`
+	ExpiresAt    int64  `json:"expires_at,omitempty"`
+}
+
 type Workflow struct {
 	ID              string          `json:"id"`
 	TenantID        string          `json:"tenant_id"`
