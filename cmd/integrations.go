@@ -141,6 +141,12 @@ func buildConnectCommand(spec *integrations.Spec) *cobra.Command {
 	case integrations.KindCluster:
 		cmd.Flags().String("cluster-name", "", "Cluster name (required)")
 		cmd.Flags().String("description", "", "Cluster description")
+		cmd.Flags().String("flow-source", "cilium", "Flow collection source: cilium, istio, or aws-vpc-cni")
+		cmd.Flags().String("metrics-source", "none", "Metrics source: none (K8s Metrics Server), opentelemetry, or datadog")
+		cmd.Flags().String("datadog-namespace", "datadog", "Namespace where Datadog is deployed (with --metrics-source datadog)")
+		cmd.Flags().Bool("argocd", false, "Enable ArgoCD deployment sync (auto-discovers the ArgoCD server in-cluster)")
+		cmd.Flags().String("argocd-namespace", "argocd", "Namespace where ArgoCD is deployed (with --argocd)")
+		cmd.Flags().Int("workload-count", 0, "Workload count for operator resource sizing (kubectl get deploy,sts,ds,job,cj -A --no-headers | wc -l)")
 		cmd.Flags().Bool("safe-apply", false, "Allow the operator to auto-apply YAML changes")
 		cmd.Flags().String("values-file", "", "Path to write the generated Helm values file (default kestrel-ai-operator-values-<name>.yaml)")
 	case integrations.KindCloud:

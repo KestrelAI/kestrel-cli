@@ -89,7 +89,15 @@ var Registry = []Spec{
 		Key: "kubernetes", Name: "Kubernetes", Kind: KindCluster,
 		Description: "Onboard a cluster by installing the Kestrel operator via Helm",
 		SetupHelp: `No credentials needed up front: the CLI mints an operator token, writes a Helm values
-file, and prints the 'helm install' command to run against your cluster.`,
+file, and prints the 'helm install' command to run against your cluster.
+Optional flags mirror the UI's operator credential form:
+  --flow-source cilium|istio|aws-vpc-cni   network flow collection source (default cilium)
+  --metrics-source none|opentelemetry|datadog   metrics source (default: K8s Metrics Server)
+  --datadog-namespace <ns>                 where Datadog runs (default datadog)
+  --argocd [--argocd-namespace <ns>]       enable ArgoCD GitOps deployment sync
+  --workload-count <n>                     sizes operator CPU/memory; get it with:
+      kubectl get deploy,sts,ds,job,cj -A --no-headers | wc -l
+  --safe-apply                             allow approved YAML changes to be applied`,
 	},
 
 	// --- Cloud IAM flows ---
