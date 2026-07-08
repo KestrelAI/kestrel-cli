@@ -290,6 +290,8 @@ func nodeIcon(nodeType string) string {
 		return "*"
 	case "condition":
 		return "?"
+	case "loop":
+		return "@"
 	case "approval":
 		return "!"
 	default:

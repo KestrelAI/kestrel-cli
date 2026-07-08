@@ -414,7 +414,9 @@ func promptForMissingFields(client *api.Client, definition json.RawMessage) (jso
 
 	var missing []missingEntry
 	for i, node := range def.Nodes {
-		if node.Type != "action" {
+		// Loop ("Poll Until") nodes embed a catalog action whose required
+		// fields live in data.config, same as plain action nodes.
+		if node.Type != "action" && node.Type != "loop" {
 			continue
 		}
 		tmpl, ok := templateIndex[node.Data.Action]
