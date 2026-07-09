@@ -292,6 +292,8 @@ func nodeIcon(nodeType string) string {
 		return "?"
 	case "loop":
 		return "@"
+	case "for_each":
+		return "#"
 	case "approval":
 		return "!"
 	default:
