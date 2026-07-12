@@ -405,6 +405,44 @@ Account, subscribed to incident events; copy the signing secret it shows.`,
 		},
 	},
 
+	{
+		Key: "vault", Name: "HashiCorp Vault", Kind: KindToken,
+		Description:    "Vault KV secrets, policies, leases, and rotation",
+		ConnectPath:    "/api/integrations/vault/connect",
+		DisconnectPath: "/api/integrations/vault/disconnect",
+		TestPath:       "/api/integrations/vault/test",
+		SetupHelp: `Token: create a periodic, renewable token bound to a dedicated Kestrel policy, e.g.
+  vault token create -policy=kestrel -period=768h
+Grant the policy read/list on sys/health, sys/mounts, sys/policies/acl, sys/auth, and the
+KV metadata/ paths you want monitored, plus write only where workflows need it.
+Namespace (Enterprise/HCP only): HCP Vault uses "admin"; leave blank for OSS Vault.
+No webhooks needed — Kestrel polls the Vault API (secret values are never read by triggers).`,
+		Fields: []Field{
+			{Flag: "address", JSON: "address", Usage: "Vault address (https://vault.example.com:8200)", Required: true},
+			{Flag: "token", JSON: "token", Usage: "Vault token", Required: true, Secret: true},
+			{Flag: "namespace", JSON: "namespace", Usage: "Vault namespace (Enterprise/HCP; e.g. admin)"},
+		},
+	},
+	{
+		Key: "infisical", Name: "Infisical", Kind: KindToken,
+		Description:    "Infisical secrets, approvals, and secret syncs",
+		ConnectPath:    "/api/integrations/infisical/connect",
+		DisconnectPath: "/api/integrations/infisical/disconnect",
+		TestPath:       "/api/integrations/infisical/test",
+		SetupHelp: `Machine Identity: Infisical -> Organization Settings -> Identities -> Create identity with
+Universal Auth, then grant it access to the projects you want to automate and copy the
+Client ID and Client Secret.
+Site URL: leave blank for Infisical Cloud US; use https://eu.infisical.com for EU Cloud
+or your own URL for self-hosted.
+No webhooks needed — Kestrel polls the Infisical audit log and project APIs (secret-change
+triggers need a paid plan for audit log access; secret values are never read by triggers).`,
+		Fields: []Field{
+			{Flag: "client-id", JSON: "client_id", Usage: "Machine Identity client ID", Required: true},
+			{Flag: "client-secret", JSON: "client_secret", Usage: "Machine Identity client secret", Required: true, Secret: true},
+			{Flag: "site-url", JSON: "site_url", Usage: "Site URL (default https://app.infisical.com)"},
+		},
+	},
+
 	// --- Knowledge sources ---
 	{
 		Key: "confluence", Name: "Confluence", Kind: KindKnowledge, SourceType: "confluence",
