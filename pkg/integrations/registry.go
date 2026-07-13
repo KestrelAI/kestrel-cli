@@ -429,9 +429,9 @@ No webhooks needed — Kestrel polls the Vault API (secret values are never read
 		ConnectPath:    "/api/integrations/infisical/connect",
 		DisconnectPath: "/api/integrations/infisical/disconnect",
 		TestPath:       "/api/integrations/infisical/test",
-		SetupHelp: `Machine Identity: Infisical -> Organization Settings -> Identities -> Create identity with
-Universal Auth, then grant it access to the projects you want to automate and copy the
-Client ID and Client Secret.
+		SetupHelp: `Machine Identity: Infisical -> Organization -> Access Control -> Machine Identities -> Create
+identity with Universal Auth, then grant it access to the projects you want to automate and
+copy the Client ID and Client Secret.
 Site URL: leave blank for Infisical Cloud US; use https://eu.infisical.com for EU Cloud
 or your own URL for self-hosted.
 No webhooks needed — Kestrel polls the Infisical audit log and project APIs (secret-change
