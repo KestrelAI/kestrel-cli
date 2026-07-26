@@ -457,6 +457,23 @@ Organization key: sonarcloud.io -> your organization -> the key in the URL
 			{Flag: "api-token", JSON: "api_token", Usage: "SonarCloud API token", Required: true, Secret: true},
 		},
 	},
+	{
+		Key: "okta", Name: "Okta", Kind: KindToken,
+		Description:    "Okta identity security: users, groups, sessions, and System Log triggers",
+		ConnectPath:    "/api/integrations/okta/connect",
+		DisconnectPath: "/api/integrations/okta/disconnect",
+		TestPath:       "/api/integrations/okta/test",
+		SetupHelp: `API token (SSWS): Okta Admin Console -> Security -> API -> Tokens -> Create token.
+Org URL: your Okta domain, e.g. https://your-org.okta.com (find it in the Admin Console header).
+The token inherits the permissions of the admin who created it; a read-only admin token
+works for triggers and read blocks, while lifecycle/session blocks need a super admin
+or org admin token.
+No webhooks needed — Kestrel polls the Okta System Log for security events.`,
+		Fields: []Field{
+			{Flag: "org-url", JSON: "org_url", Usage: "Okta org URL (https://your-org.okta.com)", Required: true},
+			{Flag: "api-token", JSON: "api_token", Usage: "Okta API token (SSWS)", Required: true, Secret: true},
+		},
+	},
 
 	// --- Knowledge sources ---
 	{
