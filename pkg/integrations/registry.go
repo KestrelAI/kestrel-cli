@@ -442,6 +442,21 @@ triggers need a paid plan for audit log access; secret values are never read by 
 			{Flag: "site-url", JSON: "site_url", Usage: "Site URL (default https://app.infisical.com)"},
 		},
 	},
+	{
+		Key: "sonarcloud", Name: "SonarCloud", Kind: KindToken,
+		Description:    "SonarCloud code quality gates, issues, and security hotspots",
+		ConnectPath:    "/api/integrations/sonarcloud/connect",
+		DisconnectPath: "/api/integrations/sonarcloud/disconnect",
+		TestPath:       "/api/integrations/sonarcloud/test",
+		SetupHelp: `API token: sonarcloud.io -> your avatar -> My Account -> Security -> Generate Token.
+Organization key: sonarcloud.io -> your organization -> the key in the URL
+(sonarcloud.io/organizations/<key>) or Administration -> Organization settings.`,
+		PostConnectHint: "To receive analysis events, add a webhook in SonarCloud: your organization (or project) -> Administration -> Webhooks -> Create, with URL {server}/api/webhooks/sonarcloud and the secret printed above (SonarCloud signs deliveries with it via X-Sonar-Webhook-HMAC-SHA256).",
+		Fields: []Field{
+			{Flag: "organization", JSON: "organization", Usage: "SonarCloud organization key", Required: true},
+			{Flag: "api-token", JSON: "api_token", Usage: "SonarCloud API token", Required: true, Secret: true},
+		},
+	},
 
 	// --- Knowledge sources ---
 	{

@@ -88,6 +88,9 @@ func TestGet(t *testing.T) {
 	if Get("cloudflare") == nil {
 		t.Error("Get(cloudflare) returned nil")
 	}
+	if Get("sonarcloud") == nil {
+		t.Error("Get(sonarcloud) returned nil")
+	}
 	if Get("does-not-exist") != nil {
 		t.Error("Get(does-not-exist) should return nil")
 	}
