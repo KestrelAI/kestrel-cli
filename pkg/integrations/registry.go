@@ -451,7 +451,7 @@ triggers need a paid plan for audit log access; secret values are never read by 
 		SetupHelp: `API token: sonarcloud.io -> your avatar -> My Account -> Access Tokens -> Generate Token.
 Organization key: sonarcloud.io -> your organization -> the key in the URL
 (sonarcloud.io/organizations/<key>) or Administration -> Organization settings.`,
-		PostConnectHint: "To receive analysis events, add a webhook in SonarCloud: your organization (or project) -> Administration -> Webhooks -> Create, with URL {server}/api/webhooks/sonarcloud and the secret printed above (SonarCloud signs deliveries with it via X-Sonar-Webhook-HMAC-SHA256).",
+		PostConnectHint: "To receive analysis events, add a webhook in SonarCloud: open your organization and select Webhooks in the left sidebar (for a single project: Administration -> Webhooks), then Create, with URL {server}/api/webhooks/sonarcloud and the secret printed above (SonarCloud signs deliveries with it via X-Sonar-Webhook-HMAC-SHA256).",
 		Fields: []Field{
 			{Flag: "organization", JSON: "organization", Usage: "SonarCloud organization key", Required: true},
 			{Flag: "api-token", JSON: "api_token", Usage: "SonarCloud API token", Required: true, Secret: true},
