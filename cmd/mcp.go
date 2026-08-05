@@ -451,7 +451,7 @@ func registerTools(server *mcp.Server, client *api.Client, cfg *config.Config) {
 	// --- get_integrations_status ---
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_integrations_status",
-		Description: "Check which integrations are connected (GitHub, GitLab, Slack, PagerDuty, Datadog, Jira, Linear, Confluence, PostHog, Vercel, Cloudflare, Railway, Fly.io, Nebius, Beam, Daytona, Supabase, PlanetScale, Neon, ClickHouse, Jenkins, CircleCI, SonarCloud, Okta, ArgoCD, Argo Rollouts, Flux CD, Karpenter, Kyverno, Trivy, Terraform Cloud, Pulumi Cloud, HashiCorp Vault, Infisical).",
+		Description: "Check which integrations are connected (GitHub, GitLab, Slack, PagerDuty, Datadog, Jira, Linear, Confluence, PostHog, Vercel, Cloudflare, Railway, Fly.io, Nebius, Beam, Daytona, Supabase, PlanetScale, Neon, ClickHouse, Databricks, Jenkins, CircleCI, SonarCloud, Okta, ArgoCD, Argo Rollouts, Flux CD, Karpenter, Kyverno, Trivy, Terraform Cloud, Pulumi Cloud, HashiCorp Vault, Infisical).",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args emptyArgs) (*mcp.CallToolResult, any, error) {
 		result, err := client.GetIntegrationsStatus()
 		if err != nil {

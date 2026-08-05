@@ -94,6 +94,9 @@ func TestGet(t *testing.T) {
 	if Get("okta") == nil {
 		t.Error("Get(okta) returned nil")
 	}
+	if Get("databricks") == nil {
+		t.Error("Get(databricks) returned nil")
+	}
 	if Get("does-not-exist") != nil {
 		t.Error("Get(does-not-exist) should return nil")
 	}

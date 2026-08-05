@@ -474,6 +474,23 @@ No webhooks needed — Kestrel polls the Okta System Log for security events.`,
 			{Flag: "api-token", JSON: "api_token", Usage: "Okta API token (SSWS)", Required: true, Secret: true},
 		},
 	},
+	{
+		Key: "databricks", Name: "Databricks", Kind: KindToken,
+		Description:    "Databricks jobs, clusters, DLT pipelines, and SQL warehouses",
+		ConnectPath:    "/api/integrations/databricks/connect",
+		DisconnectPath: "/api/integrations/databricks/disconnect",
+		TestPath:       "/api/integrations/databricks/test",
+		SetupHelp: `Personal access token: your workspace -> Settings -> Developer -> Access tokens -> Generate new token
+(a service-principal token is recommended for production).
+Workspace URL: the workspace base URL from the browser address bar, e.g.
+https://dbc-a1b2c3d4-e5f6.cloud.databricks.com (Azure: https://adb-xxxx.azuredatabricks.net).
+No webhooks needed — Kestrel polls the Databricks REST API for job-run, cluster, and
+DLT pipeline events.`,
+		Fields: []Field{
+			{Flag: "workspace-url", JSON: "workspace_url", Usage: "Databricks workspace URL (https://dbc-xxx.cloud.databricks.com)", Required: true},
+			{Flag: "api-token", JSON: "api_token", Usage: "Databricks personal access token", Required: true, Secret: true},
+		},
+	},
 
 	// --- Knowledge sources ---
 	{
