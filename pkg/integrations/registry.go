@@ -115,6 +115,17 @@ setup with an External ID; (2) create the role in your AWS account, then re-run 
 private key (PEM) and note the fingerprint, tenancy OCID, and user OCID from the
 configuration file preview it shows.`,
 	},
+	{
+		Key: "gcp", Name: "Google Cloud (GCP)", Kind: KindCloud,
+		Description: "Connect a GCP project with keyless Workload Identity Federation",
+		SetupHelp: `Two steps: (1) run with --bootstrap --project-id <project> to print a Cloud Shell setup
+script; (2) run that script in your project, then re-run with --project-id to verify.
+The script creates a least-privilege service account Kestrel impersonates — no service
+account keys are created or stored.
+Cost blocks additionally need a BigQuery billing export: Cloud console -> Billing ->
+Billing export -> BigQuery export -> Detailed usage cost. Pass it with
+--billing-export-table <project.dataset.table>. Google can take up to 24h to populate it.`,
+	},
 
 	// --- Token integrations ---
 	{
